@@ -153,7 +153,7 @@ hapi:
     # comma-separated list of fully qualified interceptor classes. 
     # classes listed here will be fetched from the Spring context when combined with 'custom-bean-packages', 
     # or will be instantiated via reflection using an no-arg contructor; then registered with the server  
-    #custom-interceptor-classes:  
+    custom-interceptor-classes: ca.uhn.fhir.jpa.starter.interceptor.CortexAuthorizationInterceptor
 
     # Threadpool size for BATCH'ed GETs in a bundle.
     #    bundle_batch_pool_size: 10
