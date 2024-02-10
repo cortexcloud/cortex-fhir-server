@@ -95,6 +95,8 @@ public class AppProperties {
   private Integer bundle_batch_pool_max_size = 100;
   private final Set<String> local_base_urls = new HashSet<>();
   private final Set<String> logical_urls = new HashSet<>();
+
+  private Oauth2 oauth2 = new Oauth2();
   
   private final List<String> custom_interceptor_classes = new ArrayList<>();
 
@@ -888,4 +890,43 @@ public Cors getCors() {
   public void setEnable_index_of_type(boolean enable_index_of_type) {
     this.enable_index_of_type = enable_index_of_type;
   }
+
+  public static class Oauth2 {
+
+		public Boolean enabled = false;
+		public String issuer = "";
+		public String jwks_uri = "";
+
+	  public Boolean getEnabled() {
+		  return enabled;
+	  }
+
+	  public void setEnabled(Boolean enabled) {
+		  this.enabled = enabled;
+	  }
+
+	  public String getIssuer() {
+		  return issuer;
+	  }
+
+	  public void setIssuer(String issuer) {
+		  this.issuer = issuer;
+	  }
+
+	  public String getJwks_uri() {
+		  return jwks_uri;
+	  }
+
+	  public void setJwks_uri(String jwks_uri) {
+		  this.jwks_uri = jwks_uri;
+	  }
+  }
+
+	public Oauth2 getOauth2() {
+		return oauth2;
+	}
+
+	public void setOauth2(Oauth2 oauth2) {
+		this.oauth2 = oauth2;
+	}
 }
