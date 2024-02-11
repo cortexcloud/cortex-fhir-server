@@ -35,6 +35,8 @@ COPY --from=build-hapi --chown=1001:1001 /tmp/hapi-fhir-jpaserver-starter/opente
 
 ENV ALLOW_EMPTY_PASSWORD=yes
 
+FROM busybox:1.35.0-uclibc as busybox
+
 ########### distroless brings focus on security and runs on plain spring boot - this is the default image
 FROM gcr.io/distroless/java17-debian11:nonroot AS default
 # 65532 is the nonroot user's uid
@@ -45,5 +47,8 @@ WORKDIR /app
 
 COPY --chown=nonroot:nonroot --from=build-distroless /app /app
 COPY --chown=nonroot:nonroot --from=build-hapi /tmp/hapi-fhir-jpaserver-starter/opentelemetry-javaagent.jar /app
+COPY --chown=nonroot:nonroot --from=busybox /bin/sh /bin/sh
+COPY --chown=nonroot:nonroot --from=busybox /bin/cat /bin/cat
+COPY --chown=nonroot:nonroot entrypoint.sh /entrypoint.sh
 
-ENTRYPOINT ["java", "--class-path", "/app/main.war", "-Dloader.path=main.war!/WEB-INF/classes/,main.war!/WEB-INF/,/app/extra-classes", "org.springframework.boot.loader.PropertiesLauncher"]
+ENTRYPOINT ["/entrypoint.sh"]
