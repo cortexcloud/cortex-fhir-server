@@ -1,5 +1,6 @@
 package ca.uhn.fhir.jpa.starter.interceptor;
 
+import ca.uhn.fhir.context.FhirVersionEnum;
 import ca.uhn.fhir.jpa.starter.AppProperties;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import ca.uhn.fhir.rest.server.interceptor.auth.AuthorizationInterceptor;
@@ -10,12 +11,19 @@ import com.auth0.jwk.JwkProviderBuilder;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import com.auth0.jwt.interfaces.RSAKeyProvider;
+
+import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import java.util.List;
@@ -23,6 +31,7 @@ import java.util.List;
 @Component
 public class OAuth2AuthorizationInterceptor extends AuthorizationInterceptor {
 
+	private static final Logger logger = LoggerFactory.getLogger(OAuth2AuthorizationInterceptor.class);
 	private final AppProperties appProperties;
 
 	public OAuth2AuthorizationInterceptor(AppProperties appProperties) {
@@ -45,10 +54,157 @@ public class OAuth2AuthorizationInterceptor extends AuthorizationInterceptor {
 		}
 		String token = authHeaders[1];
 		if (validateToken(token)) {
-			return new RuleBuilder().allowAll().build();
+			List<String> fhirRoles = this.getFHIRRoles(token);
+			if (fhirRoles == null) {
+				return new RuleBuilder().denyAll().build();
+			}
+			if (fhirRoles.contains("FHIRAdmin")) {
+				return new RuleBuilder().allowAll().build();
+			}
+			List<IAuthRule> rules = new ArrayList<>();
+			if (fhirRoles.contains("FHIRTerminologyAdmin")) {
+				rules = this.addFHIRTerminologyAdminRules(rules);
+			}
+			if (fhirRoles.contains("FHIRCortexReadWrite")) {
+				rules = this.addFHIRCortexReadWriteRules(rules);
+			}
+			return rules;
 		}
 		return new RuleBuilder().denyAll().build();
-    }
+	}
+
+	private List<String> getFHIRRoles(String token) {
+		DecodedJWT jwt = JWT.decode(token);
+		Map<String, Object> resourceAccess = jwt.getClaim("resource_access").asMap();
+		if (resourceAccess != null) {
+			// Assuming "fhir" is the client ID and you want to access its roles
+			Map<String, Object> fhirAccess = (Map<String, Object>) resourceAccess.get("fhir");
+
+			if (fhirAccess != null) {
+				// Extract the roles assigned within the "fhir" client
+				return (List<String>) fhirAccess.get("roles");
+			}
+		}
+		return null;
+	}
+
+	private List<IAuthRule> addFHIRTerminologyAdminRules(List<IAuthRule> rules) {
+		List<IAuthRule> newRules = new ArrayList<>(rules);
+		FhirVersionEnum fhirVersion = this.appProperties.getFhir_version();
+		String fhirVersionName = fhirVersion.name();
+		newRules.addAll(new RuleBuilder()
+			.allow().write().resourcesOfType("CodeSystem").withAnyId().andThen()
+			.allow().read().resourcesOfType("CodeSystem").withAnyId().andThen()
+			.allow().delete().resourcesOfType("CodeSystem").withAnyId().andThen().build()
+		);
+		newRules.addAll(new RuleBuilder()
+			.allow().write().resourcesOfType("ValueSet").withAnyId().andThen()
+			.allow().read().resourcesOfType("ValueSet").withAnyId().andThen()
+			.allow().delete().resourcesOfType("ValueSet").withAnyId().andThen().build()
+		);
+		newRules.addAll(new RuleBuilder()
+			.allow().write().resourcesOfType("ConceptMap").withAnyId().andThen()
+			.allow().read().resourcesOfType("ConceptMap").withAnyId().andThen()
+			.allow().delete().resourcesOfType("ConceptMap").withAnyId().andThen().build()
+		);
+		newRules = this.addAllowReadAndAllOperationOfCodeSystem(newRules, fhirVersionName);
+		newRules = this.addAllowReadAndAllOperationOfValueSet(newRules, fhirVersionName);
+		newRules = this.addAllowReadAndAllOperationOfConceptMap(newRules, fhirVersionName);
+		return newRules;
+	}
+
+	private List<IAuthRule> addFHIRCortexReadWriteRules(List<IAuthRule> rules) {
+		List<IAuthRule> newRules = new ArrayList<>(rules);
+		FhirVersionEnum fhirVersion = this.appProperties.getFhir_version();
+		String fhirVersionName = fhirVersion.name();
+
+		newRules.addAll(new RuleBuilder()
+			.allow().write().resourcesOfType("Patient").withAnyId().andThen()
+			.allow().read().resourcesOfType("Patient").withAnyId().andThen()
+			.allow().delete().resourcesOfType("Patient").withAnyId().andThen().build()
+		);
+
+		newRules = this.addAllowReadAndAllOperationOfCodeSystem(newRules, fhirVersionName);
+		newRules = this.addAllowReadAndAllOperationOfValueSet(newRules, fhirVersionName);
+		newRules = this.addAllowReadAndAllOperationOfConceptMap(newRules, fhirVersionName);
+
+		return newRules;
+	}
+
+	private List<IAuthRule> addAllowReadAndAllOperationOfCodeSystem(List<IAuthRule> rules, String fhirVersionName) {
+		List<IAuthRule> newRules = new ArrayList<>(rules);
+		Class<? extends IBaseResource> codeSystemClass;
+		switch (fhirVersionName) {
+			case "R4":
+				codeSystemClass = org.hl7.fhir.r4.model.CodeSystem.class;
+				break;
+			case "R4B":
+				codeSystemClass = org.hl7.fhir.r4b.model.CodeSystem.class;
+				break;
+			case "R5":
+				codeSystemClass = org.hl7.fhir.r5.model.CodeSystem.class;
+				break;
+			default:
+				newRules.addAll(new RuleBuilder().denyAll().build());
+				return newRules;
+		}
+		newRules.addAll(new RuleBuilder()
+			.allow().read().resourcesOfType("CodeSystem").withAnyId().andThen()
+			.allow().operation().withAnyName().onType(codeSystemClass).andAllowAllResponses().andThen()
+			.build()
+		);
+		return newRules;
+	}
+
+	private List<IAuthRule> addAllowReadAndAllOperationOfValueSet(List<IAuthRule> rules, String fhirVersionName) {
+		List<IAuthRule> newRules = new ArrayList<>(rules);
+		Class<? extends IBaseResource> valueSetClass;
+		switch (fhirVersionName) {
+			case "R4":
+				valueSetClass = org.hl7.fhir.r4.model.ValueSet.class;
+				break;
+			case "R4B":
+				valueSetClass = org.hl7.fhir.r4b.model.ValueSet.class;
+				break;
+			case "R5":
+				valueSetClass = org.hl7.fhir.r5.model.ValueSet.class;
+				break;
+			default:
+				newRules.addAll(new RuleBuilder().denyAll().build());
+				return newRules;
+		}
+		newRules.addAll(new RuleBuilder()
+			.allow().read().resourcesOfType("ValueSet").withAnyId().andThen()
+			.allow().operation().withAnyName().onType(valueSetClass).andAllowAllResponses().andThen()
+			.build()
+		);
+		return newRules;
+	}
+
+	private List<IAuthRule> addAllowReadAndAllOperationOfConceptMap(List<IAuthRule> rules, String fhirVersionName) {
+		List<IAuthRule> newRules = new ArrayList<>(rules);
+		Class<? extends IBaseResource> conceptMapClass;
+		switch (fhirVersionName) {
+			case "R4":
+				conceptMapClass = org.hl7.fhir.r4.model.ConceptMap.class;
+				break;
+			case "R4B":
+				conceptMapClass = org.hl7.fhir.r4b.model.ConceptMap.class;
+				break;
+			case "R5":
+				conceptMapClass = org.hl7.fhir.r5.model.ConceptMap.class;
+				break;
+			default:
+				newRules.addAll(new RuleBuilder().denyAll().build());
+				return newRules;
+		}
+		newRules.addAll(new RuleBuilder()
+			.allow().read().resourcesOfType("ConceptMap").withAnyId().andThen()
+			.allow().operation().withAnyName().onType(conceptMapClass).andAllowAllResponses().andThen()
+			.build()
+		);
+		return newRules;
+	}
 
 	private boolean validateToken(String token) {
 		String jwksUrl = this.appProperties.getOauth2().getJwks_uri();
@@ -74,7 +230,7 @@ public class OAuth2AuthorizationInterceptor extends AuthorizationInterceptor {
 			return true;
 		} catch (Exception e) {
 			// Log or handle the exception as needed
-			e.printStackTrace();
+			logger.error(e.toString());
 			return false;
 		}
 	}
