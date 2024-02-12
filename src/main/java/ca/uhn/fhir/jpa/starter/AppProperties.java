@@ -85,6 +85,7 @@ public class AppProperties {
 
   private Boolean lastn_enabled = false;
   private boolean store_resource_in_lucene_index_enabled = false;
+  private String elasticsearch_index_prefix = "";
   private NormalizedQuantitySearchLevel normalized_quantity_search_level = NormalizedQuantitySearchLevel.NORMALIZED_QUANTITY_SEARCH_NOT_SUPPORTED;
 
   private Boolean use_apache_address_strategy = false;
@@ -94,6 +95,8 @@ public class AppProperties {
   private Integer bundle_batch_pool_max_size = 100;
   private final Set<String> local_base_urls = new HashSet<>();
   private final Set<String> logical_urls = new HashSet<>();
+
+  private Oauth2 oauth2 = new Oauth2();
   
   private final List<String> custom_interceptor_classes = new ArrayList<>();
 
@@ -560,6 +563,14 @@ public Cors getCors() {
 		this.store_resource_in_lucene_index_enabled = store_resource_in_lucene_index_enabled;
 	}
 
+	public String getElasticsearch_index_prefix() {
+		return elasticsearch_index_prefix;
+	}
+
+	public void setElasticsearch_index_prefix(String elasticsearch_index_prefix) {
+		this.elasticsearch_index_prefix = elasticsearch_index_prefix;
+	}
+
 	public NormalizedQuantitySearchLevel getNormalized_quantity_search_level() {
 	return this.normalized_quantity_search_level;
   }
@@ -879,4 +890,43 @@ public Cors getCors() {
   public void setEnable_index_of_type(boolean enable_index_of_type) {
     this.enable_index_of_type = enable_index_of_type;
   }
+
+  public static class Oauth2 {
+
+		public Boolean enabled = false;
+		public String issuer = "";
+		public String jwks_uri = "";
+
+	  public Boolean getEnabled() {
+		  return enabled;
+	  }
+
+	  public void setEnabled(Boolean enabled) {
+		  this.enabled = enabled;
+	  }
+
+	  public String getIssuer() {
+		  return issuer;
+	  }
+
+	  public void setIssuer(String issuer) {
+		  this.issuer = issuer;
+	  }
+
+	  public String getJwks_uri() {
+		  return jwks_uri;
+	  }
+
+	  public void setJwks_uri(String jwks_uri) {
+		  this.jwks_uri = jwks_uri;
+	  }
+  }
+
+	public Oauth2 getOauth2() {
+		return oauth2;
+	}
+
+	public void setOauth2(Oauth2 oauth2) {
+		this.oauth2 = oauth2;
+	}
 }
